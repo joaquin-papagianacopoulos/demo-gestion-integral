@@ -157,7 +157,7 @@ input:focus,select:focus{outline:2px solid #c7d2fe;border-color:var(--brand)}
 .paybtns .m-tarjeta{--c:#2563eb;--cl:#dbeafe;--cd:#1e3a8a}
 .paybtns .m-qr{--c:#7c3aed;--cl:#ede9fe;--cd:#4c1d95}
 .paybtns .m-cc{--c:#ea580c;--cl:#ffedd5;--cd:#7c2d12}
-@media print{body *{visibility:hidden}.ticket,.ticket *{visibility:visible}.ticket{position:absolute;left:0;top:0;border:0;width:80mm;max-width:80mm}}
+@media print{body *{visibility:hidden}.ticket,.ticket *,.printarea,.printarea *{visibility:visible}.ticket{position:absolute;left:0;top:0;border:0;width:80mm;max-width:80mm}.printarea{position:absolute;left:0;top:0;width:100%}.noprint{display:none!important}}
 .quick{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .ticket{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;background:#fffef8;border:1px dashed #cbd5e1;border-radius:8px;padding:14px;max-width:340px;margin:0 auto}
 .ticket hr{border:0;border-top:1px dashed #94a3b8;margin:8px 0}
@@ -674,7 +674,38 @@ function salesOrders(){
   const f=ui.salesFilter;
   const l=S.sales.filter(x=>x.channel!=='salon'&&(f==='Todos'||x.status===f||(f==='Web'&&x.channel==='web'))&&x.sync!=='pending').slice(-40).reverse();
   return `<div class="card"><div class="row sb" style="margin-bottom:12px"><div class="cats" style="margin:0">${['Todos','Pendiente','Preparado','Entregado','Web'].map(c=>`<button class="${f===c?'on':''}" onclick="ui.salesFilter='${c}';render()">${c==='Web'?'Pedidos web':c}</button>`).join('')}</div><button class="btn p" onclick="orderModal()">${ic('plus')} Nuevo pedido de oficina</button></div>
-  ${table(['N°','Fecha','Origen','Cliente','Vendedor','>Ítems','>Total','Estado',''],l.map(x=>`<tr><td>#${x.n}</td><td>${fdt(x.ts)}</td><td><span class="chip ${x.channel==='web'?'ok':'brand'}">${CHN[x.channel]}</span></td><td>${esc(CU(x.customerId).name)}</td><td>${esc(x.vendor)}</td><td class="r">${x.items.length}</td><td class="r"><b>${money(x.total)}</b></td><td>${stChip(x.status)}</td><td class="r">${x.status==='Pendiente'?`<button class="btn sm" onclick="orderAdv('${x.id}')">Preparar →</button>`:x.status==='Preparado'?`<button class="btn sm ok" onclick="orderAdv('${x.id}')">Entregar ✓</button>`:''}</td></tr>`).join(''))}</div>`;
+  ${table(['N°','Fecha','Origen','Cliente','Vendedor','>Ítems','>Total','Estado',''],l.map(x=>`<tr><td>#${x.n}</td><td>${fdt(x.ts)}</td><td><span class="chip ${x.channel==='web'?'ok':'brand'}">${CHN[x.channel]}</span></td><td>${esc(CU(x.customerId).name)}</td><td>${esc(x.vendor)}</td><td class="r">${x.items.length}</td><td class="r"><b>${money(x.total)}</b></td><td>${stChip(x.status)}</td><td class="r" style="white-space:nowrap"><button class="btn sm" onclick="orderView('${x.id}')">📋 Ver / armar</button> ${x.status==='Pendiente'?`<button class="btn sm" onclick="orderAdv('${x.id}')">Preparar →</button>`:x.status==='Preparado'?`<button class="btn sm ok" onclick="orderAdv('${x.id}')">Entregar ✓</button>`:''}</td></tr>`).join(''))}</div>`;
+}
+function orderView(id){const x=S.sales.find(s=>s.id===id);ui.pick={id,q:x.items.map(i=>i.qty),ck:x.items.map(()=>false)};pickRender()}
+function pickInfo(){const pk=ui.pick,n=pk.q.filter(v=>v>0).length,d=pk.ck.filter((v,i)=>v&&pk.q[i]>0).length;return `Armado: ${d} de ${n}`}
+function pickQ(i,d){const pk=ui.pick,x=S.sales.find(s=>s.id===pk.id);pk.q[i]=Math.max(0,Math.min(x.items[i].qty,pk.q[i]+d));if(!pk.q[i])pk.ck[i]=false;pickRender()}
+function pickX(i){const pk=ui.pick,x=S.sales.find(s=>s.id===pk.id);pk.q[i]=pk.q[i]?0:x.items[i].qty;pk.ck[i]=false;pickRender()}
+function pickRender(){
+  const pk=ui.pick,x=S.sales.find(s=>s.id===pk.id),c=CU(x.customerId),ed=x.status==='Pendiente';
+  const lt=i=>Math.round(x.items[i].total/x.items[i].qty*pk.q[i]),total=sum(x.items.map((_,i)=>lt(i)),v=>v),changed=pk.q.some((v,i)=>v!==x.items[i].qty);
+  const rows=x.items.map((it,i)=>{const p=P(it.pid),f=it.fmt==='u'?'Unidad':it.fmt==='d'?'Display x'+p.disp:'Bulto x'+p.bulto,q=pk.q[i],z=q===0;
+    return `<tr style="${z?'background:#fef2f2':''}"><td class="c noprint"><input type="checkbox" style="width:24px;height:24px" ${pk.ck[i]?'checked':''} ${z?'disabled':''} onchange="ui.pick.ck[${i}]=this.checked;document.getElementById('pickInfo').textContent=pickInfo()"></td>
+    <td><span style="${z?'text-decoration:line-through;color:#991b1b':''}">${p.emoji} <b>${esc(p.name)}</b></span> ${z?'<span class="chip bad">Sin stock</span>':q<it.qty?'<span class="chip warn">Faltante</span>':''}</td><td>${f}</td><td class="r">${it.qty}</td>
+    <td class="r" style="white-space:nowrap">${ed?`<span class="qty"><button class="noprint" onclick="pickQ(${i},-1)">−</button><span style="font-size:20px">${q}</span><button class="noprint" onclick="pickQ(${i},1)">+</button></span>`:`<b>${q}</b>`}</td>
+    <td class="r mut">${p.kind==='combo'?'—':p.stock.deposito}</td><td class="r"><b>${money(lt(i))}</b></td><td class="noprint">${ed?`<button class="rm" onclick="pickX(${i})">${z?'↩ Restaurar':'✖ No hay'}</button>`:''}</td></tr>`}).join('');
+  modal(`<div class="printarea"><h2>Pedido #${x.n} ${stChip(x.status)} <button class="x noprint" onclick="closeModal()">×</button></h2>
+   <div class="grid g3" style="margin-bottom:12px"><div><span class="mut">Cliente</span><br><b>${esc(c.name)}</b></div><div><span class="mut">Vendedor / Origen</span><br><b>${esc(x.vendor)} · ${CHN[x.channel]}</b></div><div><span class="mut">Fecha · Pago</span><br><b>${fdt(x.ts)} · ${PAYN[x.pay]}</b></div></div>
+   ${table(['<span class="noprint">✔</span>','Producto','Formato','>Pedido','>A enviar','>Stock dep.','>Subtotal','<span class="noprint"></span>'],rows)}
+   <div class="row sb" style="margin-top:12px;font-size:18px"><span>Total ${changed?'a facturar':'del pedido'}</span><b>${changed?`<s class="mut" style="font-size:14px">${money(x.total)}</s> `:''}${money(total)}</b></div></div>
+   <div class="row sb noprint" style="margin-top:14px"><b id="pickInfo">${pickInfo()}</b><div class="row"><button class="btn" onclick="window.print()">🖨 Imprimir lista</button>${ed?`<button class="btn p" onclick="pickApply()">Marcar como preparado</button>`:x.status==='Preparado'?`<button class="btn ok" onclick="orderAdv('${x.id}');closeModal()">Entregar ✓</button>`:''}</div></div>`,true);
+}
+function pickApply(){
+  if(!guard())return;
+  const pk=ui.pick,x=S.sales.find(s=>s.id===pk.id);let diffTot=0;
+  const items=[];
+  x.items.forEach((it,i)=>{const q=pk.q[i];if(q===it.qty){items.push(it);return}
+    const r=q/it.qty,lostUnits=it.units-Math.round(it.units*r),lostTot=it.total-Math.round(it.total*r);
+    const m=consume([{pid:it.pid,units:lostUnits}]);for(const pid in m)P(+pid).stock.deposito+=m[pid];
+    diffTot+=lostTot;if(q>0)items.push({...it,qty:q,units:Math.round(it.units*r),total:Math.round(it.total*r),cost:Math.round(it.cost*r)})});
+  const changed=diffTot>0;x.items=items;x.total=sum(items,'total');x.cost=sum(items,'cost');
+  if(changed){if(x.pay==='cc'&&x.customerId)addCC('cliente',x.customerId,0,diffTot,`Ajuste pedido #${x.n} (faltantes)`);addLog(`Pedido #${x.n}: faltantes por ${money(diffTot)}, stock devuelto al depósito`,'warn')}
+  x.status=items.length?'Preparado':'Cancelado';save();closeModal();
+  toast(!items.length?`Pedido #${x.n} cancelado: no había stock de nada`:changed?`Pedido #${x.n} preparado con faltantes. Nuevo total ${money(x.total)}`:`Pedido #${x.n} preparado`,changed?'warn':'ok');
 }
 function orderAdv(id){if(!guard())return;const x=S.sales.find(s=>s.id===id);x.status=x.status==='Pendiente'?'Preparado':'Entregado';save();render();toast(`Pedido #${x.n}: ${x.status}`,'ok')}
 function orderModal(){
